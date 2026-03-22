@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- SEO & Meta -->
+    <title>Student Portfo — 学生のための投資ポートフォリオ管理</title>
+    <meta name="description" content="学生投資家のためのポートフォリオ管理アプリ。スクリーンショットから自動読み取り、資産配分チャート、損益管理を1画面で。">
+    <meta name="keywords" content="学生,投資,ポートフォリオ,資産管理,株式,投資信託">
+    <meta name="author" content="Student Portfo">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Student Portfo — 学生投資家応援アプリ">
+    <meta property="og:description" content="スクリーンショットから自動読み取り。資産配分チャート・損益管理を1画面で完結。">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="icon_512.jpg">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Student Portfo">
+    <meta name="twitter:description" content="学生のためのポートフォリオ管理アプリ">
+
+    <!-- PWA -->
+    <meta name="theme-color" content="#00ff9d">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/jpeg" href="icon_192.jpg">
+    <link rel="apple-touch-icon" href="icon_192.jpg">
+
+    <!-- Dependencies -->
+    <script src="js/chart.umd.min.js"></script>
+    <script src="js/confetti.browser.min.js"></script>
+
+    <!-- App Styles -->
+    <link rel="stylesheet" href="css/style.css?v=8">
+    <style>
+        .ocr-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10, 10, 20, 0.9);
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .ocr-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .ocr-progress-bar-container {
+            width: 80%;
+            max-width: 400px;
+            height: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+        }
+        .ocr-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #a855f7, #ec4899, #ffb300);
+            background-size: 200% 100%;
+            border-radius: 10px;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: moveGradient 2s linear infinite;
+        }
+        @keyframes moveGradient { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+        .ocr-progress-title {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #a855f7, #ec4899);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .ocr-progress-desc {
+            font-size: 1rem;
+            color: #a0aec0;
+            text-align: center;
+            max-width: 80%;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- OCR Loading Overlay -->
+    <div id="ocrOverlay" class="ocr-overlay">
+        <div id="ocrProgressTitle" class="ocr-progress-title">スキャン準備中...</div>
+        <div class="ocr-progress-bar-container">
+            <div id="ocrProgressBar" class="ocr-progress-bar"></div>
+        </div>
+        <div id="ocrProgressDesc" class="ocr-progress-desc">画像を読み込んでいます</div>
+    </div>
+
+    <!-- Splash Screen -->
+    <div class="splash" id="splash">
+        <div class="splash-logo">Student Portfo</div>
+        <div class="splash-sub">学生投資家応援アプリ</div>
+        <div class="splash-bar">
+            <div class="splash-bar-fill"></div>
+        </div>
+    </div>
+
+    <!-- Particle Background -->
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="container">
+
+        <!-- ───── Navigation ───── -->
+        <nav class="navbar" id="navbar">
+            <div class="logo">
+                <img src="icon_192.jpg" alt="Student Portfo" class="logo-icon">
+                <div>
+                    <div class="logo-text">Student Portfo</div>
+                    <div class="logo-sub">Portfolio Tracker</div>
+                </div>
+            </div>
+            <div class="nav-actions">
+                <button class="btn-icon" onclick="showApiKeyDialog()" title="API Key設定" id="btn-settings">
+                    ⚙️
+                </button>
+                <button class="btn-icon" onclick="renderAll()" title="データ更新" id="btn-refresh">
+                    🔄
+                </button>
+            </div>
+        </nav>
+
+        <!-- ───── Summary Stats ───── -->
+        <section class="stats-grid" id="statsSection">
+            <div class="stat-card total" style="position: relative; overflow: hidden;">
+                <div id="levelBadge" style="position: absolute; top: 10px; right: 15px; background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000; padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 12px; box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4); z-index: 2;">Lv.1 ひよっこ投資家</div>
+                <div class="stat-label">総資産評価額</div>
+                <div class="stat-value" id="statTotal" style="margin-top: 5px;">¥0</div>
+                <div class="stat-sub">Total Value</div>
+                <div title="次のレベルまでの経験値" style="margin-top: 15px; background: rgba(0,0,0,0.3); border-radius: 4px; height: 6px; width: 100%; position: relative; overflow: hidden;">
+                    <div id="expBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #FFD700, #ffb300); transition: width 0.5s ease; box-shadow: 0 0 10px rgba(255,215,0,0.5);"></div>
+                </div>
+            </div>
+            <div class="stat-card profit">
+                <div class="stat-label">総損益</div>
+                <div class="stat-value positive" id="statProfit">¥0</div>
+                <div class="stat-sub">Profit / Loss</div>
+            </div>
+            <div class="stat-card count">
+                <div class="stat-label">保有銘柄数</div>
+                <div class="stat-value" id="statCount">0</div>
+                <div class="stat-sub">Holdings</div>
+            </div>
+        </section>
+
+        <!-- ───── Goal Meter ───── -->
+        <section class="card animate-fade-in" style="margin: 0 5% 25px 5%; background: linear-gradient(145deg, rgba(20, 20, 45, 0.7), rgba(10, 10, 25, 0.9)); border-color: rgba(255,215,0,0.3);">
+            <div class="card-header" style="margin-bottom: 10px; padding-bottom: 0; border: none;">
+                <div class="icon" style="background: rgba(255, 215, 0, 0.15); color: #FFD700;">🎯</div>
+                <h2 style="font-size: 1.1rem; color: #FFD700;">次の目標 / Next Goal</h2>
+            </div>
+            <div style="text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; color: #fff;" id="goalTitle">目標を計算中...</div>
+            <div style="background: rgba(255,255,255,0.05); border-radius: 20px; height: 24px; width: 100%; position: relative; border: 1px solid rgba(255,255,255,0.1); overflow: hidden;">
+                <div id="goalBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #ff416c, #ff4b2b); transition: width 1s ease-out; border-radius: 20px;"></div>
+                <div id="goalText" style="position: absolute; top: 0; width: 100%; text-align: center; line-height: 24px; font-size: 12px; font-weight: 800; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">0%</div>
+            </div>
+        </section>
+
+        <!-- ───── Asset Input ───── -->
+        <main>
+            <section class="card animate-fade-in animate-delay-1" id="addAssetSection">
+                <div class="card-header">
+                    <div class="icon" style="background: rgba(255, 59, 94, 0.15); color: #ff3b5e;">➕</div>
+                    <h2>資産追加</h2>
+                </div>
+
+                <!-- OCR Button -->
+                <button class="btn-ocr" onclick="startOCR()" id="btn-ocr" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.9) 0%, rgba(236, 72, 153, 0.9) 100%); box-shadow: 0 8px 32px rgba(236, 72, 153, 0.3);">
+                    <span style="font-size: 1.5rem;">✨</span>
+                    <span style="font-weight: 800; font-size: 1.05rem; letter-spacing: 0.5px;">資産をスキャンして経験値を獲得</span>
+                </button>
+
+                <!-- Detected Assets -->
+                <div class="detected-list" id="detectedList">
+                    <div class="detected-list-header">検出された資産  —  確認して追加してください</div>
+                    <div id="detectedItems"></div>
+                </div>
+
+                <!-- Manual Add -->
+                <div class="manual-section">
+                    <h3>📝 手動追加</h3>
+                    <div class="input-group">
+                        <label class="input-label" for="manualType">種類</label>
+                        <select id="manualType" class="detected-input">
+                            <option value="stock" style="color:#000;">個別株・ETF (1株単位)</option>
+                            <option value="mutual_fund" style="color:#000;">投資信託 (1万口単位)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label" for="manualName">銘柄名</label>
+                        <input type="text" id="manualName" placeholder="例: トヨタ自動車">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label" for="manualQty">数量（株数/口数）</label>
+                        <input type="number" id="manualQty" value="100" placeholder="100">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label" for="manualBuyPrice">取得単価（円）</label>
+                        <input type="number" id="manualBuyPrice" value="3000" placeholder="3000">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label" for="manualPrice">現在の単価（円）</label>
+                        <input type="number" id="manualPrice" value="3000" placeholder="3000">
+                    </div>
+                    <button class="btn-primary btn-full" onclick="addManualAsset()" id="btn-add-manual">
+                        この資産を追加する
+                    </button>
+                </div>
+            </section>
+
+            <!-- ───── Portfolio Table ───── -->
+            <section class="card section-gap animate-fade-in animate-delay-2" id="portfolioSection">
+                <div class="card-header">
+                    <div class="icon" style="background: rgba(0, 184, 255, 0.15); color: #00b8ff;">📋</div>
+                    <h2>保有資産一覧</h2>
+                </div>
+                <div class="table-container">
+                    <table id="portfolioTable">
+                        <thead>
+                            <tr>
+                                <th>銘柄</th>
+                                <th class="text-right">数量</th>
+                                <th class="text-right">取得単価</th>
+                                <th class="text-right">現在単価</th>
+                                <th class="text-right">評価額</th>
+                                <th class="text-right">損益</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ───── Future Simulator Section ───── -->
+            <section class="card section-gap animate-fade-in animate-delay-3" id="simulatorSection">
+                <div class="card-header">
+                    <div class="icon" style="background: rgba(0, 255, 157, 0.15); color: #00ff9d;">🔮</div>
+                    <h2>未来予想シミュレーター</h2>
+                </div>
+                <div class="sim-controls" style="margin-bottom: 20px; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                        <div style="flex: 1; min-width: 250px;">
+                            <label style="display:block; font-size: 13px; color: var(--text-muted); margin-bottom: 5px;">毎月の追加積立額（円）</label>
+                            <input type="number" id="simMonthly" value="30000" class="detected-input" oninput="renderSimulator()">
+                        </div>
+                        <div style="flex: 1; min-width: 250px;">
+                            <label style="display:block; font-size: 13px; color: var(--text-muted); margin-bottom: 5px;">想定利回り（年利 %）</label>
+                            <input type="number" id="simReturn" value="5" class="detected-input" step="0.1" oninput="renderSimulator()">
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px; font-size: 14px; text-align: center;">
+                        20年後の予想資産額: <strong id="simFutureValue" style="font-size: 24px; color: #00ff9d;">¥0</strong>
+                    </div>
+                </div>
+                <div class="chart-section" style="height: 300px;">
+                    <div class="chart-container" style="height: 100%;">
+                        <canvas id="simulatorChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ───── Chart Section ───── -->
+            <section class="card section-gap animate-fade-in animate-delay-3" id="chartSection" style="display:none">
+                <div class="card-header">
+                    <div class="icon" style="background: rgba(108, 92, 231, 0.15); color: #6c5ce7;">📊</div>
+                    <h2>ポートフォリオ配分</h2>
+                </div>
+                <div class="chart-section">
+                    <div class="chart-container">
+                        <canvas id="allocationChart"></canvas>
+                    </div>
+                    <div class="chart-legend" id="chartLegend"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- ───── Footer ───── -->
+        <footer>
+            <p>© 2025 Student Portfo — 学生投資家応援プロジェクト</p>
+        </footer>
+
+    </div>
+
+    <!-- App Logic -->
+    <script src="js/app.js?v=15"></script>
+
+    <!-- Service Worker Registration & Cache Clear -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            // Unregister old Service Workers to clear stale cache
+            navigator.serviceWorker.getRegistrations().then(regs => {
+                regs.forEach(reg => reg.unregister());
+            });
+            // Clear all caches
+            if (window.caches) {
+                caches.keys().then(keys => {
+                    keys.forEach(key => caches.delete(key));
+                });
+            }
+        }
+    </script>
+</body>
+</html>
