@@ -1,4 +1,4 @@
-const CACHE_NAME = 'student-portfo-v8';
+const CACHE_NAME = 'student-portfo-v9';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

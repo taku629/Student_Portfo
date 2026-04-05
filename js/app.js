@@ -17,6 +17,17 @@ const CHART_COLORS = [
   '#54a0ff', '#ff9ff3', '#c8d6e5', '#8395a7'
 ];
 
+// ─── Helpers (Security & UI) ───
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // ─── Splash Screen ───
 function initSplash() {
   const bar = document.querySelector('.splash-bar-fill');
@@ -151,7 +162,7 @@ function showToast(message, type = 'success') {
   toast.className = `toast ${type}`;
   toast.innerHTML = `
     <span class="toast-icon">${icons[type] || '✅'}</span>
-    <span class="toast-message">${message}</span>
+    <span class="toast-message">${escapeHtml(message)}</span>
   `;
 
   container.appendChild(toast);
@@ -387,7 +398,7 @@ async function startOCR() {
                 </div>
                 <div class="detected-field">
                   <label class="detected-field-label">銘柄名</label>
-                  <input type="text" id="det-name-${index}" value="${asset.name}" class="detected-input detected-input-name" placeholder="銘柄名を入力">
+                  <input type="text" id="det-name-${index}" value="${escapeHtml(asset.name)}" class="detected-input detected-input-name" placeholder="銘柄名を入力">
                 </div>
                 <div class="detected-field-row">
                   <div class="detected-field">
@@ -799,7 +810,7 @@ function renderTable() {
     const row = document.createElement('tr');
     row.style.animation = `fadeInUp 0.3s ease-out ${index * 0.03}s both`;
     row.innerHTML = `
-      <td><strong>${a.name}</strong></td>
+      <td><strong>${escapeHtml(a.name)}</strong></td>
       <td class="text-right">${a.quantity.toLocaleString()} <span style="font-size:10px; opacity:0.6">${unitStr}</span></td>
       <td class="text-right">¥${(a.buyPrice || 0).toLocaleString()}</td>
       <td class="text-right">¥${a.currentPrice.toLocaleString()}</td>
